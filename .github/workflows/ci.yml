@@ -1,0 +1,33 @@
+name: lab-evidence
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out lab repository
+        uses: actions/checkout@v4
+
+      - name: Install experiment dependency
+        run: sudo apt-get update && sudo apt-get install -y python3-numpy
+
+      - name: Validate Python tools
+        run: make test
+
+      - name: Run deterministic fault experiment
+        run: make experiment-smoke
+
+      - name: Upload experiment evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: fault-experiment
+          path: build/fault-experiment

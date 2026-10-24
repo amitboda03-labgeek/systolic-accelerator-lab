@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Self-Repairing Systolic Array Lab</title>
+    <style>
+      :root { color-scheme: dark; --bg: #07111f; --panel: #0e1b2e; --line: #233a59; --muted: #91a4bd; --text: #eef5ff; --blue: #54a8ff; --green: #38d996; --amber: #ffbd61; --red: #ff6e7d; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 20% 0%, #14325a 0, var(--bg) 42%); color: var(--text); font: 15px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
+      main { max-width: 1180px; margin: 0 auto; padding: 42px 24px 64px; }
+      .eyebrow { color: var(--blue); letter-spacing: .14em; text-transform: uppercase; font-weight: 700; font-size: 12px; }
+      h1 { font-size: clamp(30px, 5vw, 56px); line-height: 1.03; max-width: 820px; margin: 12px 0; }
+      .lead { color: var(--muted); max-width: 750px; font-size: 17px; }
+      .layout { display: grid; grid-template-columns: 1.2fr .8fr; gap: 18px; margin-top: 30px; }
+      .panel { background: rgba(14, 27, 46, .9); border: 1px solid var(--line); border-radius: 18px; padding: 20px; box-shadow: 0 18px 60px rgba(0,0,0,.22); }
+      .panel h2 { font-size: 16px; margin: 0 0 16px; }
+      .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+      label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+      select, button { border: 1px solid #345277; border-radius: 9px; background: #10243e; color: var(--text); padding: 10px 12px; font: inherit; }
+      button { cursor: pointer; background: linear-gradient(135deg, #1479dc, #2550c6); border: 0; font-weight: 700; }
+      button.secondary { background: #1c304a; border: 1px solid #345277; }
+      button:hover { filter: brightness(1.15); }
+      .array { display: grid; grid-template-columns: repeat(8, minmax(26px, 1fr)); gap: 5px; margin: 18px 0; }
+      .cell { aspect-ratio: 1; border: 1px solid #2c4b70; border-radius: 6px; display: grid; place-items: center; color: #bad0ea; font-size: 12px; background: #10263f; transition: .25s; }
+      .cell.fault { background: rgba(255, 110, 125, .28); border-color: var(--red); color: #fff; }
+      .cell.repaired { background: rgba(56, 217, 150, .25); border-color: var(--green); color: #fff; }
+      .legend { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+      .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .metric { background: #0a1728; border-radius: 11px; padding: 12px; }
+      .metric strong { display: block; font-size: 24px; margin-top: 4px; }
+      .metric span, .small { color: var(--muted); font-size: 12px; }
+      .status { border-left: 3px solid var(--green); padding: 10px 12px; background: rgba(56, 217, 150, .08); margin: 16px 0; }
+      .status.warn { border-color: var(--amber); background: rgba(255, 189, 97, .08); }
+      .log { height: 188px; overflow: auto; background: #07111d; border-radius: 10px; padding: 12px; color: #b9c9dc; font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .bars { display: grid; gap: 7px; margin-top: 12px; }
+      .bar-row { display: grid; grid-template-columns: 42px 1fr 52px; gap: 8px; align-items: center; font-size: 12px; }
+      .bar-track { height: 10px; background: #12243a; border-radius: 99px; overflow: hidden; }
+      .bar-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #267ee5, #52d5ff); transition: width .35s; }
+      footer { color: var(--muted); margin-top: 24px; font-size: 12px; }
+      @media (max-width: 820px) { .layout { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Hardware reliability lab · Sky130-ready RTL</div>
+      <h1>See a systolic column detect, localize, and repair itself.</h1>
+      <p class="lead">This small, dependency-free demo mirrors the accelerator’s 8×8 weight-stationary array, ABFT checksum column, spare column, and degraded-mode policy.</p>
+
+      <section class="panel">
+        <h2>Inject a permanent PE fault</h2>
+        <div class="controls">
+          <label>Row <select id="fault-row"></select></label>
+          <label>Logical column <select id="fault-col"></select></label>
+          <label>Fault mode <select id="fault-mode"><option value="stuck0">stuck-at 0</option><option value="stuck1">stuck-at 1</option><option value="flip">bit flip</option></select></label>
+          <button id="fault-button">Inject fault + repair</button>
+          <button class="secondary" id="reset-button">Reset array</button>
+        </div>
+      </section>
+
+      <div class="layout">
+        <section class="panel">
+          <h2>Weight-stationary PE mesh</h2>
+          <div id="array" class="array"></div>
+          <div class="legend"><span><i class="dot" style="background:var(--red)"></i>faulted PE</span><span><i class="dot" style="background:var(--green)"></i>copied to spare</span><span><i class="dot" style="background:var(--blue)"></i>active</span></div>
+          <div class="status" id="status">Ready: 64 signed-int8 weights loaded; checksum and spare columns armed.</div>
+          <div class="bars" id="bars"></div>
+        </section>
+        <section class="panel">
+          <h2>Controller trace</h2>
+          <div class="metrics">
+            <div class="metric"><span>clean cycles</span><strong>21</strong></div>
+            <div class="metric"><span>repair cycles</span><strong id="repair-cycles">—</strong></div>
+            <div class="metric"><span>spare state</span><strong id="spare-state">free</strong></div>
+          </div>
+          <p class="small" style="margin-top:18px">Checksum equation: sum(logical outputs) = checksum-column output</p>
+          <div class="log" id="log"></div>
+        </section>
+      </div>
+      <footer>Open the RTL repository’s README for simulation, SAIF activity generation, OpenLane configuration, and quantized fault-accuracy experiments.</footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
